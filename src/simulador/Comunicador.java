@@ -7,12 +7,12 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.concurrent.BlockingQueue;
 
-/**
- * Gerencia a comunicação de rede (envio e recebimento de mensagens).
- */
 public class Comunicador {
     private final int porta;
     private final BlockingQueue<Mensagem> filaDeMensagens;
+    
+    private ServerSocket serverSocket;
+    private Thread serverThread;
 
     public Comunicador(int porta, BlockingQueue<Mensagem> filaDeMensagens) {
         this.porta = porta;
@@ -23,17 +23,24 @@ public class Comunicador {
      * Inicia uma thread para escutar por conexões e receber mensagens.
      */
     public void iniciarServidor() {
-        new Thread(() -> {
-            try (ServerSocket serverSocket = new ServerSocket(porta)) {
-                // System.out.println("Servidor escutando na porta " + porta); // Log opcional
-                while (true) {
+        serverThread = new Thread(() -> {
+            try {
+                serverSocket = new ServerSocket(porta); // Atribui ao campo
+                // System.out.println("Servidor escutando na porta " + porta);
+                while (!Thread.currentThread().isInterrupted()) {
                     Socket clientSocket = serverSocket.accept();
                     new Thread(() -> receberMensagem(clientSocket)).start();
                 }
             } catch (IOException e) {
-                System.err.println("Erro no servidor na porta " + porta + ": " + e.getMessage());
+                // --- REVERTIDO ---
+                // Silencioso quando fechamos o socket (InterruptedException)
+                if (!serverSocket.isClosed()) {
+                    System.err.println("Erro no servidor na porta " + porta + ": " + e.getMessage());
+                }
+                // --- FIM DA REVERSÃO ---
             }
-        }).start();
+        });
+        serverThread.start();
     }
 
     /**
@@ -44,7 +51,7 @@ public class Comunicador {
             Mensagem msg = (Mensagem) in.readObject();
             filaDeMensagens.put(msg); // Adiciona a mensagem na fila para ser processada
         } catch (IOException | ClassNotFoundException | InterruptedException e) {
-            // Silencioso para não poluir o log com erros de conexão esperados
+            // Silencioso
         }
     }
 
@@ -56,7 +63,23 @@ public class Comunicador {
              ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream())) {
             out.writeObject(msg);
         } catch (IOException e) {
-            // System.err.println("Falha ao enviar para " + host + ":" + portaDestino); // Log opcional
+            // System.err.println("Falha ao enviar para " + host + ":" + portaDestino);
+        }
+    }
+    
+    /**
+     * Para a thread do servidor e fecha o ServerSocket.
+     */
+    public void desligarServidor() {
+        try {
+            if (serverSocket != null && !serverSocket.isClosed()) {
+                serverSocket.close(); // Isso vai causar uma IOException no accept()
+            }
+            if (serverThread != null) {
+                serverThread.interrupt(); // Interrompe a thread principal
+            }
+        } catch (IOException e) {
+            System.err.println("Erro ao fechar servidor na porta " + porta + ": " + e.getMessage());
         }
     }
 }
