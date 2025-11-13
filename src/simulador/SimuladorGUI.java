@@ -321,7 +321,7 @@ public class SimuladorGUI {
             boolean isTraidor = traitors.contains(id);
             JTextArea logArea = logAreas.get(id);
             
-            Processo p = new Processo(id, commanderId, isTraidor, processosConfig, logArea, globalStepLock);
+            Processo p = new Processo(id, commanderId, isTraidor, processosConfig);
             generais.add(p);
         }
 
