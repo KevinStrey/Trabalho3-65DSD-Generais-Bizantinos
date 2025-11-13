@@ -10,7 +10,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Scanner;
 
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
@@ -21,17 +20,16 @@ import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
-import javax.swing.JSpinner; // --- NOVO IMPORT ---
+import javax.swing.JSpinner;
+import javax.swing.JSlider; // --- NOVO IMPORT ---
 import javax.swing.JTextArea;
-import javax.swing.SpinnerNumberModel; // --- NOVO IMPORT ---
+import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import javax.swing.WindowConstants;
 
 public class SimuladorGUI {
 
-    // --- REMOVIDO: CONFIG_FILE e lerConfiguracao() ---
-    
     // Configuração dos processos (agora gerada dinamicamente)
     private Map<Integer, String[]> processosConfig;
     
@@ -48,18 +46,20 @@ public class SimuladorGUI {
     private JButton startButton;
     private JButton nextStepButton;
     
-    // --- NOVOS COMPONENTES ---
-    private JSpinner processCountSpinner; // Para escolher o número de generais
-    private JButton setupButton; // Para aplicar a configuração
-    private JPanel dynamicControlsPanel; // Painel para Comandante/Traidores
-    private JPanel traitorsPanel; // Painel específico dos checkboxes
-    private JPanel logsPanel; // Painel que contém as áreas de log
-    private JScrollPane logsScrollPane; // ScrollPane para os logs
+    // Componentes de Setup
+    private JSpinner processCountSpinner;
+    private JButton setupButton;
+    private JPanel dynamicControlsPanel;
+    private JPanel traitorsPanel;
+    private JPanel logsPanel;
+    private JScrollPane logsScrollPane;
+    
+    // --- NOVOS COMPONENTES PARA FONTE ---
+    private int currentFontSize = 12; // Tamanho padrão da fonte
+    private JLabel fontLabel; // Rótulo para mostrar o tamanho
     // --- FIM DOS NOVOS COMPONENTES ---
 
     public SimuladorGUI() {
-        // A leitura do config.txt foi removida.
-        // A UI será criada vazia e preenchida após o setup.
         criarJanela();
     }
     
@@ -75,11 +75,11 @@ public class SimuladorGUI {
             }
         });
 
-        // 1. Cria o painel de controle (agora com "Setup")
+        // 1. Cria o painel de controle
         frame.add(criarPainelDeControle(), BorderLayout.NORTH);
 
         // 2. Cria o painel de logs (inicialmente vazio)
-        logsPanel = new JPanel(new GridLayout(1, 0, 10, 10)); // Layout inicial
+        logsPanel = new JPanel(new GridLayout(1, 0, 10, 10));
         logsPanel.setBorder(BorderFactory.createEmptyBorder(0, 10, 10, 10));
         logsScrollPane = new JScrollPane(logsPanel);
         logsScrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
@@ -99,11 +99,10 @@ public class SimuladorGUI {
         mainPanel.setLayout(new BoxLayout(mainPanel, BoxLayout.Y_AXIS));
         mainPanel.setBorder(BorderFactory.createTitledBorder("Configurações da Simulação"));
 
-        // --- PAINEL DE SETUP (NOVO) ---
+        // --- PAINEL DE SETUP (Número de Generais) ---
         JPanel setupPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 5));
         setupPanel.add(new JLabel("Número de Generais:"));
         
-        // Spinner para 2 a 10 generais, com padrão 4
         SpinnerNumberModel model = new SpinnerNumberModel(4, 2, 10, 1);
         processCountSpinner = new JSpinner(model);
         processCountSpinner.setPreferredSize(new Dimension(60, 25));
@@ -128,12 +127,39 @@ public class SimuladorGUI {
         // Checkboxes dos Traidores
         JPanel traitorsBox = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0));
         traitorsBox.add(new JLabel("Traidores:"));
-        traitorsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0)); // Sub-painel
+        traitorsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0));
         traitorsBox.add(traitorsPanel);
         
         dynamicControlsPanel.add(commanderBox);
         dynamicControlsPanel.add(traitorsBox);
         mainPanel.add(dynamicControlsPanel);
+
+        // --- PAINEL DE CONTROLE DE FONTE (NOVO) ---
+        JPanel fontPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 5));
+        fontLabel = new JLabel("Tamanho da Fonte: " + currentFontSize + "pt");
+        fontPanel.add(fontLabel);
+        
+        JSlider fontSlider = new JSlider(JSlider.HORIZONTAL, 8, 24, currentFontSize);
+        fontSlider.setMajorTickSpacing(4);
+        fontSlider.setMinorTickSpacing(2);
+        fontSlider.setPaintTicks(true);
+        fontSlider.setPaintLabels(true);
+        fontSlider.setPreferredSize(new Dimension(250, 45)); // Define um tamanho
+        
+        fontSlider.addChangeListener(e -> {
+            JSlider source = (JSlider) e.getSource();
+            // Atualiza o 'currentFontSize' e o rótulo
+            currentFontSize = source.getValue();
+            fontLabel.setText("Tamanho da Fonte: " + currentFontSize + "pt");
+            
+            // Só atualiza as fontes quando o usuário soltar o slider
+            if (!source.getValueIsAdjusting()) {
+                atualizarFontesDeLog(); // Chama o helper para atualizar JTextAreas existentes
+            }
+        });
+        
+        fontPanel.add(fontSlider);
+        mainPanel.add(fontPanel); // Adiciona antes dos botões de ação
 
         // --- PAINEL DE BOTÕES DE AÇÃO ---
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 5));
@@ -159,7 +185,6 @@ public class SimuladorGUI {
         mainPanel.add(buttonPanel);
 
         // --- ESTADO INICIAL ---
-        // Desabilita tudo até que o "Configurar" seja pressionado
         setDynamicControlsEnabled(false);
         startButton.setEnabled(false);
         nextStepButton.setEnabled(false);
@@ -168,49 +193,37 @@ public class SimuladorGUI {
     }
 
     /**
-     * NOVO: Chamado pelo botão "Configurar Simulação".
-     * Lê o JSpinner e recria toda a UI dinâmica.
+     * Chamado pelo botão "Configurar Simulação".
      */
     private void configurarSimulacao() {
         int numGenerais = (Integer) processCountSpinner.getValue();
 
-        // 1. Gera a configuração de rede em memória
         gerarConfiguracao(numGenerais);
-        
-        // 2. Atualiza o painel de logs (cria N áreas de texto)
         atualizarPainelDeLogs(numGenerais);
-        
-        // 3. Atualiza os controles (ComboBox e CheckBoxes)
         atualizarControlesDinamicos(numGenerais);
 
-        // 4. Habilita/Desabilita os botões apropriados
         setDynamicControlsEnabled(true);
         startButton.setEnabled(true);
         nextStepButton.setEnabled(false);
     }
     
     /**
-     * NOVO: Gera o Map 'processosConfig' em memória.
+     * Gera o Map 'processosConfig' em memória.
      */
     private void gerarConfiguracao(int numGenerais) {
         processosConfig = new HashMap<>();
         for (int i = 0; i < numGenerais; i++) {
-            // Gera "ID -> [localhost, porta]" (ex: 8000, 8001, ...)
             processosConfig.put(i, new String[]{"localhost", String.valueOf(8000 + i)});
         }
     }
 
     /**
-     * NOVO: Limpa e recria o painel de logs.
-     */
-    /**
-     * NOVO: Limpa e recria o painel de logs.
+     * Limpa e recria o painel de logs.
      */
     private void atualizarPainelDeLogs(int numGenerais) {
         logsPanel.removeAll();
         logAreas.clear();
         
-        // Define o layout de grade para o número correto de generais
         logsPanel.setLayout(new GridLayout(1, numGenerais, 10, 10));
 
         for (int id = 0; id < numGenerais; id++) {
@@ -220,44 +233,39 @@ public class SimuladorGUI {
             
             JTextArea logArea = new JTextArea(20, 25);
             logArea.setEditable(false);
-            logArea.setFont(new Font("Monospaced", Font.PLAIN, 12));
+            
+            // --- MODIFICADO: Usa a variável 'currentFontSize' ---
+            logArea.setFont(new Font("Monospaced", Font.PLAIN, currentFontSize));
             logArea.setBackground(Color.DARK_GRAY);
             logArea.setForeground(Color.LIGHT_GRAY);
             
-            // --- ALTERAÇÃO AQUI ---
-            // Habilita a quebra de linha automática
             logArea.setLineWrap(true);
             logArea.setWrapStyleWord(true);
-            // --- FIM DA ALTERAÇÃO ---
             
             logAreas.put(id, logArea);
             processLogBox.add(title, BorderLayout.NORTH);
             
-            // Adiciona o JScrollPane individual para o JTextArea
-            // Isso permite a rolagem vertical se o texto for muito grande
             JScrollPane textAreaScrollPane = new JScrollPane(logArea);
             textAreaScrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
-            textAreaScrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER); // Desliga a barra horizontal
+            textAreaScrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
             
             processLogBox.add(textAreaScrollPane, BorderLayout.CENTER);
             logsPanel.add(processLogBox);
         }
         
-        // Força o Swing a redesenhar o painel com os novos componentes
         logsPanel.revalidate();
         logsPanel.repaint();
     }  
+    
     /**
-     * NOVO: Limpa e recria os ComboBox e CheckBoxes.
+     * Limpa e recria os ComboBox e CheckBoxes.
      */
     private void atualizarControlesDinamicos(int numGenerais) {
-        // Atualiza ComboBox do Comandante
         commanderComboBox.removeAllItems();
         for (int i = 0; i < numGenerais; i++) {
             commanderComboBox.addItem(i);
         }
 
-        // Atualiza CheckBoxes dos Traidores
         traitorsPanel.removeAll();
         traitorCheckBoxes.clear();
         for (int id = 0; id < numGenerais; id++) {
@@ -272,28 +280,35 @@ public class SimuladorGUI {
     }
     
     /**
-     * NOVO: Método auxiliar para habilitar/desabilitar os controles
+     * NOVO: Atualiza a fonte de todas as JTextAreas existentes.
+     * Chamado pelo JSlider.
+     */
+    private void atualizarFontesDeLog() {
+        Font newFont = new Font("Monospaced", Font.PLAIN, currentFontSize);
+        for (JTextArea logArea : logAreas.values()) {
+            logArea.setFont(newFont);
+        }
+    }
+    
+    /**
+     * Método auxiliar para habilitar/desabilitar os controles
      */
     private void setDynamicControlsEnabled(boolean enabled) {
         commanderComboBox.setEnabled(enabled);
         for (JCheckBox cb : traitorCheckBoxes) {
             cb.setEnabled(enabled);
         }
-        // É preciso habilitar o painel pai também
         dynamicControlsPanel.setEnabled(enabled);
         traitorsPanel.setEnabled(enabled);
     }
 
     /**
      * Inicia a simulação.
-     * (Modificado para desabilitar o 'setup')
      */
     private void iniciarSimulacao() {
-        // 1. Limpa simulações anteriores
         encerrarSimulacao();
         logAreas.values().forEach(textArea -> textArea.setText(""));
 
-        // 2. Pega as configurações da UI (agora dinâmicas)
         int commanderId = (Integer) commanderComboBox.getSelectedItem();
         List<Integer> traitors = new ArrayList<>();
         for (JCheckBox cb : traitorCheckBoxes) {
@@ -302,7 +317,6 @@ public class SimuladorGUI {
             }
         }
 
-        // 3. Cria os Processos (Generais)
         for (Integer id : processosConfig.keySet()) {
             boolean isTraidor = traitors.contains(id);
             JTextArea logArea = logAreas.get(id);
@@ -311,43 +325,39 @@ public class SimuladorGUI {
             generais.add(p);
         }
 
-        // 4. Inicia as Threads
         for (Processo p : generais) {
             Thread t = new Thread(p::iniciar);
             processThreads.add(t);
             t.start();
         }
 
-        // 5. Atualiza o estado da GUI para "em execução"
         startButton.setEnabled(false);
         nextStepButton.setEnabled(true);
-        setDynamicControlsEnabled(false); // Trava a configuração
-        setupButton.setEnabled(false); // Trava o setup
+        setDynamicControlsEnabled(false);
+        setupButton.setEnabled(false);
         processCountSpinner.setEnabled(false);
     }
 
     /**
      * Chamado pelo botão "Próxima Ação".
-     * (Modificado para reabilitar os botões corretos no final)
      */
     private void executarProximoPasso() {
         synchronized (globalStepLock) {
-            globalStepLock.notifyAll(); // Acorda todas as threads
+            globalStepLock.notifyAll();
         }
         
-        // Verifica se a simulação terminou
         new Thread(() -> {
             try { Thread.sleep(500); } catch (InterruptedException e) {}
             
             boolean algumaThreadViva = processThreads.stream().anyMatch(Thread::isAlive);
             
             if (!algumaThreadViva) {
-                // Simulação terminou! Reabilita os controles.
                 SwingUtilities.invokeLater(() -> {
-                    startButton.setEnabled(true); // Permite rodar de novo
+                    startButton.setEnabled(true);
+
                     nextStepButton.setEnabled(false);
-                    setDynamicControlsEnabled(true); // Permite mudar traidores/comandante
-                    setupButton.setEnabled(true); // Permite reconfigurar o número
+                    setDynamicControlsEnabled(true);
+                    setupButton.setEnabled(true);
                     processCountSpinner.setEnabled(true);
                 });
             }
@@ -355,7 +365,7 @@ public class SimuladorGUI {
     }
 
     /**
-     * Limpa os recursos da simulação anterior. (Sem alterações)
+     * Limpa os recursos da simulação anterior.
      */
     private void encerrarSimulacao() {
         for (Thread t : processThreads) {
@@ -368,18 +378,8 @@ public class SimuladorGUI {
         generais.clear();
     }
     
-    // Método 'mostrarErro' (opcional, mas recomendado se você removeu antes)
-    private void mostrarErro(String mensagem) {
-        JFrame errorFrame = new JFrame("Erro");
-        JTextArea textArea = new JTextArea(mensagem);
-        errorFrame.add(textArea);
-        errorFrame.pack();
-        errorFrame.setLocationRelativeTo(null);
-        errorFrame.setVisible(true);
-    }
-
     /**
-     * Método main para lançar a aplicação Swing. (Sem alterações)
+     * Método main para lançar a aplicação Swing.
      */
     public static void main(String[] args) {
         try {

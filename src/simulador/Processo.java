@@ -53,11 +53,12 @@ public class Processo {
      * Ele pausa em pontos chave esperando o 'stepLock'.
      */
     public void iniciar() {
-        log("Iniciado. Comandante: " + comandanteId + ". Traidor: " + isTraidor);
+        log("Iniciado. Comandante: " + comandanteId + ". \nTraidor: " + isTraidor);
         comunicador.iniciarServidor();
 
         // Pausa para garantir que todos os servidores estejam no ar antes de começar
-        aguardarProximoPasso("Servidor no ar. Aguardando 'Próxima Ação' para Rodada 1...");
+        aguardarProximoPasso("Servidor no ar. Aguardando 'Próxima Ação' para Rodada 1..."
+        		+ "\n----------");
 
         // --- RODADA 1: Comandante envia ordens ---
         if (id == comandanteId) {
@@ -95,7 +96,8 @@ public class Processo {
         }
 
         // Sincronização
-        aguardarProximoPasso("Rodada 1 concluída. Aguardando 'Próxima Ação' para Rodada 2...");
+        aguardarProximoPasso("Rodada 1 concluída. Aguardando 'Próxima Ação' para Rodada 2..."
+        		+ "\n----------");
         
         // --- RODADA 2: Tenentes retransmitem as ordens ---
         if (id != comandanteId) {
@@ -130,7 +132,8 @@ public class Processo {
         }
         
         // --- FASE DE DECISÃO ---
-        aguardarProximoPasso("Rodada 2 concluída. Aguardando 'Próxima Ação' para Votação...");
+        aguardarProximoPasso("Rodada 2 concluída. Aguardando 'Próxima Ação' para Votação..."
+        		+ "\n----------");
         
         if (id != comandanteId) {
             log("Fim das rodadas. Iniciando votação.");
@@ -168,9 +171,9 @@ public class Processo {
                 .map(Map.Entry::getKey)
                 .orElse("INCONCLUSIVO");
 
-        log("========================================");
+        log("===================================");
         log("DECISÃO FINAL: " + decisaoFinal);
-        log("========================================");
+        log("===================================");
     }
 
     private void enviar(int idDestino, Mensagem msg) {
