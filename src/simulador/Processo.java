@@ -1,19 +1,16 @@
+// Arquivo: simulador/Processo.java (Refatorado)
 package simulador;
 
-import java.io.File;
-import java.io.FileNotFoundException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Scanner;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.stream.Collectors;
-
-// --- Imports de GUI removidos ---
-// import javax.swing.JTextArea;
-// import javax.swing.SwingUtilities;
+// --- Imports de Swing ADICIONADOS ---
+import javax.swing.JTextArea;
+import javax.swing.SwingUtilities;
 
 public class Processo {
     private final int id;
@@ -23,22 +20,22 @@ public class Processo {
 
     private final Comunicador comunicador;
     private final BlockingQueue<Mensagem> filaDeMensagens = new LinkedBlockingQueue<>();
-
-    // --- Campos de GUI removidos ---
-    // private final JTextArea logArea; 
-    // private final Object stepLock; 
+    
+    // --- Campo de GUI ADICIONADO ---
+    private final JTextArea logArea; 
     
     // Campos de estado
     private String minhaOrdem = null;
     private final List<Mensagem> ordensRecebidas = new ArrayList<>();
 
     // --- CONSTRUTOR MODIFICADO ---
-    // Não recebe mais 'logArea' ou 'stepLock'
-    public Processo(int id, int comandanteId, boolean isTraidor, Map<Integer, String[]> outrosProcessos) {
+    // Recebe JTextArea para logar
+    public Processo(int id, int comandanteId, boolean isTraidor, Map<Integer, String[]> outrosProcessos, JTextArea logArea) {
         this.id = id;
         this.comandanteId = comandanteId;
         this.isTraidor = isTraidor;
         this.outrosProcessos = outrosProcessos;
+        this.logArea = logArea; // Salva a referência da GUI
 
         int minhaPorta = Integer.parseInt(outrosProcessos.get(id)[1]);
         this.comunicador = new Comunicador(minhaPorta, filaDeMensagens);
@@ -47,17 +44,12 @@ public class Processo {
 
     /**
      * Ponto de entrada principal para a execução do processo.
-     * Este é o método que a nova 'main' irá chamar.
      */
     public void iniciar() {
         log("Iniciado. Comandante: " + comandanteId + ". Traidor: " + isTraidor);
         comunicador.iniciarServidor();
 
-        // Pausa para garantir que todos os servidores estejam no ar
         try {
-            // Este sleep é crucial em um sistema distribuído!
-            // Dá tempo para todos os outros processos iniciarem seus servidores
-            // antes que o comandante tente enviar mensagens.
             log("Servidor no ar. Aguardando 5s para outros processos iniciarem...");
             Thread.sleep(5000); 
         } catch (InterruptedException e) {
@@ -100,6 +92,7 @@ public class Processo {
             }
         }
 
+        // --- PAUSA OBSERVÁVEL ---
         aguardarProximoPasso("Rodada 1 concluída. Iniciando Rodada 2...\n----------");
         
         // --- RODADA 2: Tenentes retransmitem as ordens ---
@@ -118,22 +111,22 @@ public class Processo {
                 }
             }
 
-            // Receber as ordens dos outros tenentes
-            int numTenentes = outrosProcessos.size() - 2; // Exclui a si mesmo e o comandante
+            int numTenentes = outrosProcessos.size() - 2; 
             log("Aguardando " + numTenentes + " mensagens de outros tenentes.");
             try {
                 for (int i = 0; i < numTenentes; i++) {
-                    Mensagem msg = filaDeMensagens.take(); // Pega as ordens
+                    Mensagem msg = filaDeMensagens.take(); 
                     ordensRecebidas.add(msg);
                     log("Recebi de " + msg.getRemetenteId() + " a ordem: '" + msg.getOrdem() + "'");
                 }
             } catch (InterruptedException e) {
                 log("Interrompido enquanto esperava ordens dos tenentes.");
                 Thread.currentThread().interrupt();
-                return; // Termina
+                return; 
             }
         }
         
+        // --- PAUSA OBSERVÁVEL ---
         aguardarProximoPasso("Rodada 2 concluída. Iniciando Votação...\n----------");
         
         if (id != comandanteId) {
@@ -144,17 +137,20 @@ public class Processo {
         }
         
         log("PROCESSO CONCLUÍDO.");
-        
-        // Desliga o servidor interno
         desligar();
     }
     
     /**
-     * O 'stepLock' foi removido. Este método agora apenas loga a etapa.
+     * Pausa a simulação para torná-la observável.
      */
     private void aguardarProximoPasso(String motivo) {
         log(motivo);
-        // O stepLock.wait() foi removido. A simulação flui automaticamente.
+        try {
+            // Pausa a thread por 3 segundos
+            Thread.sleep(3000); 
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
     
     private void decidirVotoMajoritario(List<Mensagem> ordens) {
@@ -174,97 +170,29 @@ public class Processo {
 
     private void enviar(int idDestino, Mensagem msg) {
         String[] dest = outrosProcessos.get(idDestino);
-        // dest[0] = IP (ex: 192.168.1.102), dest[1] = Porta (ex: 8001)
         comunicador.enviarMensagem(dest[0], Integer.parseInt(dest[1]), msg);
     }
     
     /**
-     * Loga diretamente no Console (System.out)
+     * Loga diretamente na JTextArea da GUI (Thread-safe)
      */
     private void log(String message) {
-        // --- ALTERAÇÃO AQUI ---
-        // Remove o prefixo para um log mais limpo
-        System.out.println(message);
-        // --- FIM DA ALTERAÇÃO ---
+        // Adiciona um prefixo para clareza
+        String logCompleto = "[P" + id + "]: " + message;
+        
+        // Usa SwingUtilities para garantir que a atualização da GUI
+        // aconteça na Thread de Eventos do Swing (EDT)
+        SwingUtilities.invokeLater(() -> {
+            logArea.append(logCompleto + "\n");
+            // Auto-scroll para o final
+            logArea.setCaretPosition(logArea.getDocument().getLength());
+        });
     }
 
     public void desligar() {
+        log("Servidor desligado. Encerrando.");
         comunicador.desligarServidor();
     }
     
-    // -----------------------------------------------------------------
-    // --- NOVO MÉTODO MAIN E LÓGICA DE CONFIGURAÇÃO ---
-    // -----------------------------------------------------------------
-    
-    /**
-     * Lê o arquivo de configuração e constrói o mapa de rede.
-     */
-    private static Map<Integer, String[]> lerConfiguracao(String nomeArquivo) throws FileNotFoundException {
-        Map<Integer, String[]> mapaDeProcessos = new HashMap<>();
-        File arquivo = new File(nomeArquivo);
-        
-        // Adiciona um log para ajudar a depurar onde ele procura o arquivo
-        System.out.println("Lendo configuração de: " + arquivo.getAbsolutePath());
-        
-        Scanner scanner = new Scanner(arquivo);
-        
-        while (scanner.hasNextLine()) {
-            String linha = scanner.nextLine().trim();
-            if (linha.isEmpty() || linha.startsWith("#")) {
-                continue; // Ignora linhas vazias ou comentários
-            }
-            
-            String[] partes = linha.split("\\s+"); // Divide por espaços
-            if (partes.length >= 3) {
-                int id = Integer.parseInt(partes[0]);
-                String ip = partes[1];
-                String porta = partes[2];
-                mapaDeProcessos.put(id, new String[]{ip, porta});
-            }
-        }
-        scanner.close();
-        return mapaDeProcessos;
-    }
-
-    /**
-     * Ponto de entrada para executar o Processo como um programa independente.
-     */
-    public static void main(String[] args) {
-        // Argumentos esperados:
-        // args[0] = meuId (ex: "0")
-        // args[1] = comandanteId (ex: "0")
-        // args[2] = isTraidor (ex: "false" ou "true")
-        
-        if (args.length < 3) {
-            System.err.println("Uso: java simulador.Processo <meuId> <comandanteId> <isTraidor>");
-            System.err.println("Exemplo: java simulador.Processo 0 0 false");
-            System.exit(1);
-        }
-
-        try {
-            int meuId = Integer.parseInt(args[0]);
-            int comandanteId = Integer.parseInt(args[1]);
-            boolean isTraidor = Boolean.parseBoolean(args[2]);
-            
-            // Lê o arquivo de configuração
-            Map<Integer, String[]> config = lerConfiguracao("config.txt");
-            
-            if (!config.containsKey(meuId)) {
-                System.err.println("Erro: ID " + meuId + " não encontrado no config.txt!");
-                System.exit((int) 1D);
-            }
-            
-            // Cria e inicia o processo
-            Processo p = new Processo(meuId, comandanteId, isTraidor, config);
-            p.iniciar(); // Roda o processo na thread principal
-            
-        } catch (NumberFormatException e) {
-            System.err.println("Erro: IDs devem ser números.");
-            System.exit(1);
-        } catch (FileNotFoundException e) {
-            System.err.println("Erro: Arquivo 'config.txt' não foi encontrado.");
-            System.err.println("Certifique-se de que ele está no mesmo diretório de onde você está executando o comando.");
-            System.exit(1);
-        }
-    }
+    // --- O MÉTODO MAIN E LERCONFIGURACAO FORAM MOVIDOS PARA A PROCESSO_GUI.JAVA ---
 }

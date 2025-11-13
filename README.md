@@ -1,128 +1,138 @@
-# 🛡️ Simulador de Generais Bizantinos (BFT)
+# 🛡️ Simulador Distribuído de Generais Bizantinos (BFT)
 
-Este é um simulador acadêmico, construído em **Java Swing**, que demonstra visualmente o clássico **Problema dos Generais Bizantinos** (Byzantine Generals Problem).
+Este é um simulador acadêmico, construído em **Java**, que demonstra visualmente o **Problema dos Generais Bizantinos**.
 
-O objetivo é permitir que o usuário configure um cenário com N generais, defina um comandante, designe traidores e execute o algoritmo de consenso passo a passo. A interface permite observar os logs de cada processo em tempo real e entender como os generais leais chegam (ou não) a um consenso, mesmo com traidores tentando sabotar a comunicação.
+Diferente de outros simuladores que rodam em uma única máquina, este é um **sistema distribuído real**. Cada "General" é um processo independente (um `.jar` em execução) que se comunica com os outros através da rede (via Sockets Java), permitindo que você execute a simulação em múltiplas máquinas virtuais ou físicas.
 
-## ✨ Principais Funcionalidades
+A interface gráfica permite que cada processo seja configurado individualmente e exibe os logs de comunicação em tempo real.
 
-  * **Interface Gráfica (Swing):** Painel de controle simples para configurar e executar a simulação.
-  * **Configuração Dinâmica:** Permite definir o número de generais (processos) na simulação.
-  * **Seleção de Papéis:** O usuário pode escolher qual processo será o **comandante** e quais serão os **traidores**.
-  * **Execução Passo a Passo:** A simulação não roda de uma vez. O usuário clica no botão **"Próxima Ação \>\>"** para avançar entre as rodadas do protocolo, permitindo uma análise detalhada do que acontece em cada etapa.
-  * **Visualização Clara:** Cada processo possui sua própria área de log, mostrando as mensagens que envia, recebe e sua decisão final.
-  * **Personalização de UI:** Um slider permite **aumentar ou diminuir o tamanho da fonte** dos logs para melhor legibilidade.
-  * **Comunicação Real:** O simulador usa Sockets Java reais (`ServerSocket` e `Socket`) para a comunicação entre os processos (generais), simulando uma rede distribuída.
+## ✨ Funcionalidades
 
------
-
-## 🧐 O Problema: Generais Bizantinos
-
-Para entender o simulador, é crucial entender o problema que ele demonstra.
-
-Imagine um grupo de generais do exército bizantino acampados ao redor de uma cidade inimiga. Eles precisam decidir em conjunto se vão **ATACAR** ou **RECUAR**.
-
-  * **Comunicação:** Eles só podem se comunicar por mensageiros.
-  * **Consenso:** Todos os generais leais devem tomar a *mesma* decisão. Se alguns atacarem e outros recuarem, será um desastre.
-  * **O Desafio:** Alguns generais podem ser **traidores**.
-
-#### O que um traidor faz?
-
-1.  **Se o Comandante for traidor:** Ele pode enviar "ATACAR" para metade dos tenentes e "RECUAR" para a outra metade, tentando dividir os leais.
-2.  **Se um Tenente for traidor:** Quando ele deve retransmitir a ordem do comandante, ele mente. Ele diz "Recebi a ordem de RECUAR" quando, na verdade, recebeu "ATACAR".
-
-O objetivo do algoritmo BFT (Byzantine Fault Tolerance) é garantir que **todos os tenentes leais cheguem à mesma decisão final**, não importa o que os traidores façam. A teoria prova que isso só é possível se houver no mínimo `3m + 1` generais no total, onde `m` é o número de traidores.
+  * **GUI de Lançamento:** Chega de linha de comando. Dê dois cliques no `.jar`, e uma interface pop-up perguntará o ID do processo, o ID do comandante e se ele é um traidor.
+  * **Logs em Tempo Real:** Cada processo abre sua própria janela de log, permitindo que você veja exatamente quais mensagens ele envia, recebe e qual sua decisão final.
+  * **Sistema Distribuído Real:** Utiliza Sockets Java para comunicação de rede. Não é uma simulação de "threads", e sim processos reais em IPs reais.
+  * **Configuração de Rede Externa:** Um arquivo `config.txt` central (mas distribuído) define o mapa de rede (ID, IP, Porta) de todos os generais. [cite: 1]
+  * **Simulação Observável:** A simulação faz pausas automáticas entre as rodadas (Envio do Comandante, Retransmissão dos Tenentes, Votação) para que você possa assistir ao vivo o consenso sendo formado (ou falhando) em todas as janelas.
 
 -----
 
-## ⚙️ Como o Simulador Funciona
+## 🚀 Como Executar (Guia do Usuário)
 
-A simulação é dividida em duas partes: a interface (GUI) e a lógica dos processos.
+Você precisará de **Java (JRE) 11 ou superior** instalado em todas as máquinas.
 
-### A Interface (`SimuladorGUI.java`)
+### Passo 1: Download
 
-1.  **Configurar Simulação:** Ao clicar, a GUI lê o número 'N' do `JSpinner`, cria 'N' áreas de log e preenche os seletores de comandante e traidores.
-2.  **Iniciar Simulação:** O usuário define os papéis. Ao clicar em "Iniciar":
-      * A GUI cria `N` instâncias da classe `Processo`.
-      * Ela passa a cada processo seu ID, quem é o comandante, se ele é traidor, a lista de todos os outros processos, sua `JTextArea` de log e um objeto `globalStepLock`.
-      * A GUI inicia `N` `Threads`, uma para cada processo.
-      * Todos os controles são desabilitados, exceto o "Próxima Ação \>\>".
-3.  **Próxima Ação \>\>:** Este é o coração do controle. Todas as `Threads` dos processos estão pausadas, esperando em um `stepLock.wait()`. Quando o usuário clica neste botão, a GUI chama `globalStepLock.notifyAll()`, "acordando" todas as threads, que executam a próxima etapa da lógica e voltam a pausar.
-4.  **Slider de Fonte:** Simplesmente atualiza o tamanho da fonte em todas as `JTextArea`s quando o valor é alterado.
+Em seu GitHub, o usuário deve baixar os dois arquivos essenciais da seção "Releases" (ou do repositório):
 
-### A Lógica (`Processo.java`)
+  * `BFT-GUI.jar`
+  * `config.txt`
 
-Cada `Processo` (General) executa a seguinte lógica em sua própria thread:
+### Passo 2: Configurar a Rede (O Passo Mais Importante)
 
-1.  **Passo 1: Início (automático)**
+Antes de executar, você **deve** editar o arquivo `config.txt`. Este arquivo informa a cada general onde encontrar os outros.
 
-      * O processo é iniciado.
-      * Ele cria seu `Comunicador` e inicia seu `ServerSocket` para ouvir mensagens.
-      * **Pausa** e espera o primeiro clique no `stepLock`.
+1.  Decida quais máquinas (físicas ou VMs) você usará.
+2.  Obtenha o endereço IP de cada uma (ex: `192.168.1.5`).
+3.  Abra o `config.txt` e edite-o para refletir sua rede.
 
-2.  **Passo 2: Rodada 1 (Clique 1)**
+**Exemplo de `config.txt` para 4 máquinas na sua rede local:** [cite: 1]
 
-      * **Se for o Comandante:** Envia sua ordem para todos os Tenentes. (Se for traidor, envia ordens diferentes).
-      * **Se for um Tenente:** Espera (bloqueado) até receber a mensagem do Comandante. Armazena essa ordem.
-      * Todos **pausam** e esperam o próximo clique.
+```
+# ID   IP_DA_MAQUINA   PORTA
+0      192.168.1.4     8000
+1      192.168.1.5     8000
+2      192.168.1.7     8000
+3      192.168.1.8     8000
+```
 
-3.  **Passo 3: Rodada 2 (Clique 2)**
+🚨 **AVISO DE FIREWALL:** Esta é a causa \#1 de falhas. Você **DEVE** garantir que o firewall de todas as suas máquinas (Windows, Linux, etc.) esteja configurado para **permitir conexões de entrada** na porta que você definiu (neste exemplo, a porta `8000`).
 
-      * **Se for um Tenente:** Retransmite a ordem que *recebeu* (ou *diz* ter recebido, se for traidor) para todos os *outros* tenentes.
-      * Em seguida, espera (bloqueado) até receber as retransmissões de todos os outros tenentes.
-      * **Pausa** e espera o próximo clique.
+### Passo 3: Executar a Simulação
 
-4.  **Passo 4: Decisão (Clique 3)**
+1.  Em **CADA** uma das suas máquinas/VMs, crie uma pasta e coloque **ambos** os arquivos (`BFT-GUI.jar` e o `config.txt` que você editou) dentro dela.
+2.  Em cada máquina, **dê dois cliques no `BFT-GUI.jar`** para iniciá-lo.
+3.  Um pop-up de configuração aparecerá. Preencha-o de acordo com a máquina.
 
-      * **Se for um Tenente:** Ele agora tem uma lista de ordens (a original do comandante + as retransmissões de todos os outros).
-      * Ele aplica um **voto majoritário** simples nessa lista.
-      * Ele exibe sua "DECISÃO FINAL" no log.
-      * A thread do processo termina.
+**Exemplo de Simulação (4 Generais, 1 Traidor):**
 
-Quando todas as threads terminam, o botão "Próxima Ação \>\>" detecta isso e reabilita os controles para uma nova simulação.
+  * **Máquina 1 (IP 192.168.1.4):**
+
+      * Meu ID: `0`
+      * ID do Comandante: `0`
+      * É Traidor: (desmarcado)
+      * Clique "OK".
+
+  * **Máquina 2 (IP 192.168.1.5):**
+
+      * Meu ID: `1`
+      * ID do Comandante: `0`
+      * É Traidor: (desmarcado)
+      * Clique "OK".
+
+  * **Máquina 3 (IP 192.168.1.7):**
+
+      * Meu ID: `2`
+      * ID do Comandante: `0`
+      * É Traidor: **(marcado)**
+      * Clique "OK".
+
+  * **Máquina 4 (IP 192.168.1.8):**
+
+      * Meu ID: `3`
+      * ID do Comandante: `0`
+      * É Traidor: (desmarcado)
+      * Clique "OK".
+
+### Passo 4: Observar
+
+Quatro janelas de log (uma em cada máquina) se abrirão. Elas esperarão 5 segundos para que todos os processos se iniciem e, em seguida, executarão a simulação automaticamente, pausando 3 segundos entre cada rodada para que você possa comparar os logs.
 
 -----
 
-## 🚀 Como Executar
+## 🛠️ Como Funciona (Arquitetura)
 
-Você precisa ter o **Java Development Kit (JDK)** (versão 8 ou superior) instalado.
+Este projeto é dividido em quatro classes principais:
 
-### Opção 1: Por Linha de Comando
+1.  **`ProcessoGUI.java` (O Lançador):**
 
-1.  Coloque todos os 4 arquivos `.java` (`SimuladorGUI.java`, `Processo.java`, `Comunicador.java`, `Mensagem.java`) em um diretório chamado `simulador`.
-2.  Abra um terminal ou prompt de comando na pasta *acima* do diretório `simulador`.
-3.  Compile todos os arquivos:
-    ```sh
+      * Este é o ponto de entrada (`main`) do `.jar`.
+      * Ele usa `JOptionPane` para mostrar o pop-up de configuração.
+      * Ele lê o `config.txt` para construir o mapa da rede.
+      * Ele cria a `JFrame` e a `JTextArea` para o log.
+      * Ele instancia e inicia o `Processo` em uma nova thread.
+
+2.  **`Processo.java` (O General):**
+
+      * Contém toda a lógica principal do BFT (Rodada 1, Rodada 2, Votação).
+      * Ele **não** sabe sobre a GUI de *lançamento*, mas recebe a `JTextArea` da GUI de *log* para poder imprimir nela.
+      * Usa o método `aguardarProximoPasso()` (que contém um `Thread.sleep()`) para criar as pausas observáveis.
+      * Usa o `Comunicador` para enviar e receber mensagens.
+
+3.  **`Comunicador.java` (O Mensageiro):**
+
+      * Uma classe utilitária que gerencia a rede.
+      * `iniciarServidor()`: Inicia um `ServerSocket` em uma thread para ouvir mensagens de entrada.
+      * `enviarMensagem()`: Abre um `Socket` para um IP/Porta específico e envia um objeto `Mensagem`.
+      * Usa uma `BlockingQueue` para passar mensagens da thread do servidor para a thread do `Processo` de forma segura.
+
+4.  **`Mensagem.java` (A Mensagem):**
+
+      * Um simples objeto `Serializable` que encapsula a ordem ("ATACAR" / "RECUAR") e o ID do remetente.
+
+-----
+
+## 👨‍💻 Para Desenvolvedores (Compilando do Zero)
+
+Se você não quiser usar o `.jar` pré-compilado:
+
+1.  Clone o repositório.
+2.  Coloque todos os 4 arquivos `.java` em um pacote `simulador`.
+3.  Compile-os:
+    ```bash
     javac simulador/*.java
     ```
-4.  Execute a classe principal (a GUI):
-    ```sh
-    java simulador.SimuladorGUI
+4.  Execute o lançador principal:
+    ```bash
+    java simulador.ProcessoGUI
     ```
-
-### Opção 2: Por uma IDE (Eclipse, IntelliJ, VS Code)
-
-1.  Crie um novo projeto Java.
-2.  Crie um pacote (package) chamado `simulador`.
-3.  Adicione os 4 arquivos `.java` a esse pacote.
-4.  Encontre o arquivo `SimuladorGUI.java`, clique com o botão direito e selecione **"Run"** (Executar).
-
------
-
-## 📂 Estrutura dos Arquivos
-
-  * `SimuladorGUI.java`
-
-      * **O Painel de Controle.** Cria a janela, os botões, o slider e os painéis de log. Gerencia o início e o fim da simulação e controla o `globalStepLock`.
-
-  * `Processo.java`
-
-      * **O Cérebro de um General.** Contém toda a lógica do protocolo BFT (Rodada 1, Rodada 2, Decisão). Cada instância é executada em sua própria thread e pausa usando o `stepLock`.
-
-  * `Comunicador.java`
-
-      * **O Mensageiro.** Uma classe utilitária que gerencia a comunicação de rede. Cada processo tem um. Ela sabe como `iniciarServidor()` (para ouvir) e `enviarMensagem()` (para falar) usando Sockets Java.
-
-  * `Mensagem.java`
-
-      * **O Pergaminho.** Um objeto simples (`Serializable`) que é enviado pela rede. Ele encapsula a ordem (ex: "ATACAR") e o ID de quem a enviou.
+    (Lembre-se de que o `config.txt` deve estar no diretório de onde você executa este comando\!)
