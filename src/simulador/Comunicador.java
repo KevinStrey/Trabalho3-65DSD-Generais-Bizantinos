@@ -26,18 +26,14 @@ public class Comunicador {
         serverThread = new Thread(() -> {
             try {
                 serverSocket = new ServerSocket(porta); // Atribui ao campo
-                // System.out.println("Servidor escutando na porta " + porta);
                 while (!Thread.currentThread().isInterrupted()) {
                     Socket clientSocket = serverSocket.accept();
                     new Thread(() -> receberMensagem(clientSocket)).start();
                 }
             } catch (IOException e) {
-                // --- REVERTIDO ---
-                // Silencioso quando fechamos o socket (InterruptedException)
                 if (!serverSocket.isClosed()) {
                     System.err.println("Erro no servidor na porta " + porta + ": " + e.getMessage());
                 }
-                // --- FIM DA REVERSÃO ---
             }
         });
         serverThread.start();
